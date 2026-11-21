@@ -11,8 +11,8 @@
 .selection-sheet .actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:9px}
 .selection-sheet .actions button{padding:8px 4px;min-height:42px;font-size:12px;line-height:1.15;white-space:normal}
 @media(max-height:450px){.selection-sheet .sheet{max-height:68dvh}.selection-sheet .sheet .help{display:none}.selection-sheet .actions button{min-height:34px;padding:5px 3px}}
-</style><link rel="manifest" href="./manifest.webmanifest"><meta name="theme-color" content="#193456"><meta name="apple-mobile-web-app-title" content="Lucias Einrichtungsplaner"><meta name="apple-mobile-web-app-status-bar-style" content="default"><link rel="apple-touch-icon" href="./apple-touch-icon.png"></head><body><div class="top"><div class="brand">▦ Lucias Einrichtungsplaner</div><button id="menuBtn" class="primary">☰ Menü</button></div><main class="workspace" id="workspace"><div class="stage" id="stage"><div class="tray" id="tray"></div><div class="traylabel" id="trayLabel">Möbelablage</div><div class="room" id="room"></div><div class="dimension" id="dimTop"></div><div class="dimension" id="dimLeft"></div><div id="objects"></div><div id="measureLayer" class="measure-layer"></div></div></main><div class="bottom"><span id="status">Möbel antippen und mit dem Finger verschieben</span><button id="editSelected" class="hidden">✎ Möbel bearbeiten</button></div><div class="shade" id="shade"><div class="sheet"><h2 id="sheetTitle"></h2><div id="sheetBody"></div></div></div><input type="file" id="file" accept=".json,application/json" hidden><script>
-(()=>{'use strict';const $=id=>document.getElementById(id),KEY='raumplaner_v1';let data={room:{w:400,h:300},items:[],next:1},selected=null,scale=1,originX=0,originY=0,drag=null,formMode=null,editing=null,rotated=false;const safe=n=>Number.isFinite(+n)?+n:0,esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const validRoom=r=>r&&safe(r.w)>=100&&safe(r.w)<=1500&&safe(r.h)>=100&&safe(r.h)<=1500;const validItem=i=>i&&['furniture','door','window'].includes(i.type)&&Number.isFinite(+i.id)&&safe(i.w)>=20&&safe(i.w)<=1500&&safe(i.h)>=20&&safe(i.h)<=1500&&Number.isFinite(+i.x)&&Number.isFinite(+i.y);try{const d=JSON.parse(localStorage.getItem(KEY));if(d&&validRoom(d.room)&&Array.isArray(d.items)&&d.items.length<=300&&d.items.every(validItem)){data=d;data.next=Math.max(1,...d.items.map(i=>+i.id+1));}}catch(e){}function save(){try{localStorage.setItem(KEY,JSON.stringify(data))}catch(e){status('Bitte Plan über Menü sichern')}}function status(t){$('status').textContent=t}function current(){return data.items.find(i=>i.id===selected)}function close(){$('shade').classList.remove('show');$('shade').classList.remove('selection-sheet');formMode=null;editing=null}function show(title,html){$('shade').classList.remove('selection-sheet');$('sheetTitle').textContent=title;$('sheetBody').innerHTML=html;$('shade').classList.add('show')}$('shade').addEventListener('pointerdown',e=>{if(e.target===$('shade'))close()});function button(label,fn){const b=document.createElement('button');b.textContent=label;b.onclick=fn;return b}function fit(){
+ .library-row{border-bottom:1px solid #dbe3eb;padding:10px 0}.library-row .actions{margin-top:6px}.library-row .actions button{font-size:12px;padding:7px} </style><link rel="manifest" href="./manifest.webmanifest"><meta name="theme-color" content="#193456"><meta name="apple-mobile-web-app-title" content="Lucias Einrichtungsplaner"><meta name="apple-mobile-web-app-status-bar-style" content="default"><link rel="apple-touch-icon" href="./apple-touch-icon.png"></head><body><div class="top"><div class="brand">▦ Lucias Einrichtungsplaner</div><button id="menuBtn" class="primary">☰ Menü</button></div><main class="workspace" id="workspace"><div class="stage" id="stage"><div class="tray" id="tray"></div><div class="traylabel" id="trayLabel">Möbelablage</div><div class="room" id="room"></div><div class="dimension" id="dimTop"></div><div class="dimension" id="dimLeft"></div><div id="objects"></div><div id="measureLayer" class="measure-layer"></div></div></main><div class="bottom"><span id="status">Möbel antippen und mit dem Finger verschieben</span><button id="editSelected" class="hidden">✎ Möbel bearbeiten</button></div><div class="shade" id="shade"><div class="sheet"><h2 id="sheetTitle"></h2><div id="sheetBody"></div></div></div><input type="file" id="file" accept=".json,application/json" hidden><script>
+(()=>{'use strict';const $=id=>document.getElementById(id),KEY='raumplaner_v1';let data={room:{w:400,h:300},items:[],next:1},selected=null,scale=1,originX=0,originY=0,drag=null,formMode=null,editing=null,rotated=false;const safe=n=>Number.isFinite(+n)?+n:0,esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const validRoom=r=>r&&safe(r.w)>=100&&safe(r.w)<=1500&&safe(r.h)>=100&&safe(r.h)<=1500;const validItem=i=>i&&['furniture','door','window'].includes(i.type)&&Number.isFinite(+i.id)&&safe(i.w)>=20&&safe(i.w)<=1500&&safe(i.h)>=20&&safe(i.h)<=1500&&Number.isFinite(+i.x)&&Number.isFinite(+i.y);try{const d=JSON.parse(localStorage.getItem(KEY));if(d&&validRoom(d.room)&&Array.isArray(d.items)&&d.items.length<=300&&d.items.every(validItem)){data=d;data.next=Math.max(1,...d.items.map(i=>+i.id+1));}}catch(e){}function save(){try{localStorage.setItem(KEY,JSON.stringify(data));autosaveActiveRoom()}catch(e){status('Bitte Plan über Menü sichern')}}function status(t){$('status').textContent=t}function current(){return data.items.find(i=>i.id===selected)}function close(){$('shade').classList.remove('show');$('shade').classList.remove('selection-sheet');formMode=null;editing=null}function show(title,html){$('shade').classList.remove('selection-sheet');$('sheetTitle').textContent=title;$('sheetBody').innerHTML=html;$('shade').classList.add('show')}$('shade').addEventListener('pointerdown',e=>{if(e.target===$('shade'))close()});function button(label,fn){const b=document.createElement('button');b.textContent=label;b.onclick=fn;return b}function fit(){
  const vp=$('workspace'),W=vp.clientWidth,H=vp.clientHeight;
  if(W<20||H<20)return;
  const r=data.room;
@@ -96,7 +96,77 @@ $('workspace').addEventListener('pointermove',move);$('workspace').addEventListe
  for(const i of parked)list.append(button((i.name||'Möbel')+' ('+i.w+' × '+i.h+' cm) zurückholen',()=>{i.parked=false;i.x=Math.round((data.room.w-i.w)/2);i.y=Math.round((data.room.h-i.h)/2);selected=i.id;save();fit();close()}));
  $('parkingClose').onclick=close;
 }
-function menu(){show('Menü',`<div class="menuitems" id="menuItems"></div><p class="help">Der Raum passt sich automatisch an den Bildschirm an. Die Maße bleiben maßstabsgetreu. Nicht benötigte Möbel kannst du in die Ablage legen und später zurückholen.</p>`);const a=$('menuItems');[['＋ Möbel',()=>form('furniture')],['＋ Tür',()=>form('door')],['＋ Fenster',()=>form('window')],['Raummaße',()=>form('room')],['Möbelablage',showParking],['Plan sichern',exportPlan],['Plan laden',()=>{$('file').click();close()}],['Schließen',close]].forEach(([t,fn])=>a.append(button(t,fn)))}function exportPlan(){const blob=new Blob([JSON.stringify({version:2,...data},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='Lucias_Raumplan.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);close()}$('menuBtn').onclick=menu;$('editSelected').onclick=selectedMenu;$('file').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{const d=JSON.parse(await f.text());if(!validRoom(d.room)||!Array.isArray(d.items)||d.items.length>300||!d.items.every(validItem))throw Error('Ungültiges Planformat');if(!confirm('Aktuellen Plan ersetzen?'))return;data={room:d.room,items:d.items,next:Math.max(1,...d.items.map(i=>Number(i.id)+1))};selected=null;save();fit();status('Plan geladen')}catch(err){alert('Plan konnte nicht geladen werden: '+err.message)}finally{e.target.value=''}});// iOS standalone PWA: viewport measurements can lag behind an orientation change.
+function menu(){show('Menü',`<div class="menuitems" id="menuItems"></div><p class="help">Der Raum passt sich automatisch an den Bildschirm an. Die Maße bleiben maßstabsgetreu. Nicht benötigte Möbel kannst du in die Ablage legen und später zurückholen.</p>`);const a=$('menuItems');[['＋ Möbel',()=>form('furniture')],['＋ Tür',()=>form('door')],['＋ Fenster',()=>form('window')],['Raummaße',()=>form('room')],['Möbelablage',showParking],['Meine Zimmer',roomLibrary],['Plan sichern',exportPlan],['Plan laden',()=>{$('file').click();close()}],['Schließen',close]].forEach(([t,fn])=>a.append(button(t,fn)))}
+const ROOM_LIBRARY_KEY='lucia_room_library_v1';
+function getLibrary(){
+ try{
+  const lib=JSON.parse(localStorage.getItem(ROOM_LIBRARY_KEY));
+  if(lib&&Array.isArray(lib.rooms)&&lib.rooms.length<=100&&lib.rooms.every(r=>r&&typeof r.name==='string'&&r.name.length<=80&&validRoom(r.plan?.room)&&Array.isArray(r.plan?.items)&&r.plan.items.length<=300&&r.plan.items.every(validItem)))return lib;
+ }catch(e){}
+ return {rooms:[],active:null};
+}
+function putLibrary(lib){
+ try{localStorage.setItem(ROOM_LIBRARY_KEY,JSON.stringify(lib));return true}
+ catch(e){alert('Speichern nicht möglich. Bitte Speicherplatz prüfen und den Raum zusätzlich als JSON exportieren.');return false}
+}
+function roomLibrary(){
+ const lib=getLibrary();
+ const rows=lib.rooms.map((r,n)=>`<div class="library-row"><div><b>${esc(r.name)}</b>${lib.active===r.id?' <small>· aktiv</small>':''}</div><div class="actions"><button data-action="open" data-index="${n}">Öffnen</button><button data-action="rename" data-index="${n}">Umbenennen</button><button data-action="delete" data-index="${n}">Löschen</button></div></div>`).join('');
+ show('Meine Zimmer',`<div class="actions"><button class="primary" id="roomNew">＋ Neuer Raum</button></div><p class="help">Zimmer werden auf diesem Gerät in der App gespeichert. Beim Bearbeiten wird das aktive Zimmer automatisch aktualisiert. Für eine Sicherung auf einem anderen Gerät bitte zusätzlich „Plan sichern“ verwenden.</p><div id="roomList">${rows||'<p>Noch keine gespeicherten Zimmer.</p>'}</div><div class="actions"><button id="roomSave">Aktuellen Raum speichern</button><button id="roomClose">Schließen</button></div>`);
+ $('roomClose').onclick=close;
+ $('roomNew').onclick=()=>{
+  if(!confirm('Neuen leeren Raum erstellen? Das aktuell geöffnete Zimmer bleibt gespeichert.'))return;
+  lib.active=null;
+  if(!putLibrary(lib))return;
+  data={room:{w:400,h:300},items:[],next:1};
+  selected=null;drag=null;
+  save();close();fit();status('Neuer leerer Raum – Raummaße über Menü einstellen');
+ };
+ $('roomSave').onclick=()=>{
+  const currentRoom=lib.rooms.find(r=>r.id===lib.active);
+  const name=prompt('Name des Zimmers:',currentRoom?.name||'Wohnzimmer');
+  if(name===null)return;
+  const trimmed=name.trim().slice(0,80);
+  if(!trimmed){alert('Bitte einen Zimmernamen eingeben.');return}
+  const existing=lib.rooms.find(r=>r.name.toLocaleLowerCase()===trimmed.toLocaleLowerCase());
+  if(existing&&!confirm('Zimmer „'+existing.name+'“ überschreiben?'))return;
+  if(!existing&&lib.rooms.length>=100){alert('Maximal 100 Zimmer möglich.');return}
+  const id=existing?.id||('room_'+Date.now()+'_'+Math.random().toString(36).slice(2,8));
+  const entry={id,name:trimmed,plan:JSON.parse(JSON.stringify(data))};
+  if(existing)lib.rooms[lib.rooms.indexOf(existing)]=entry;else lib.rooms.push(entry);
+  lib.active=id;
+  if(putLibrary(lib)){status('Zimmer „'+trimmed+'“ gespeichert');roomLibrary()}
+ };
+ $('roomList').onclick=ev=>{
+  const btn=ev.target.closest('button[data-action]');if(!btn)return;
+  const index=Number(btn.dataset.index),entry=lib.rooms[index];if(!entry)return;
+  if(btn.dataset.action==='open'){
+   if(!confirm('Zimmer „'+entry.name+'“ öffnen? Der aktuelle Raum wird ersetzt. Nicht als Zimmer gespeicherte Änderungen bitte vorher sichern.'))return;
+   const next=JSON.parse(JSON.stringify(entry.plan));
+   data={room:next.room,items:next.items,next:Math.max(1,...next.items.map(i=>Number(i.id)+1))};
+   selected=null;drag=null;lib.active=entry.id;
+   if(!putLibrary(lib))return;
+   save();close();fit();status('Zimmer „'+entry.name+'“ geöffnet');
+  }else if(btn.dataset.action==='rename'){
+   const name=prompt('Neuer Zimmername:',entry.name);if(name===null)return;
+   const trimmed=name.trim().slice(0,80);
+   if(!trimmed){alert('Bitte einen Namen eingeben.');return}
+   if(lib.rooms.some(r=>r!==entry&&r.name.toLocaleLowerCase()===trimmed.toLocaleLowerCase())){alert('Dieser Name existiert bereits.');return}
+   entry.name=trimmed;if(putLibrary(lib))roomLibrary();
+  }else if(btn.dataset.action==='delete'){
+   if(!confirm('Zimmer „'+entry.name+'“ endgültig aus der Zimmerliste löschen?'))return;
+   lib.rooms.splice(index,1);if(lib.active===entry.id)lib.active=null;
+   if(putLibrary(lib))roomLibrary();
+  }
+ };
+}
+function autosaveActiveRoom(){
+ const lib=getLibrary();if(!lib.active)return;
+ const entry=lib.rooms.find(r=>r.id===lib.active);if(!entry)return;
+ entry.plan=JSON.parse(JSON.stringify(data));
+ try{localStorage.setItem(ROOM_LIBRARY_KEY,JSON.stringify(lib))}catch(e){status('Zimmer konnte nicht automatisch gespeichert werden')}
+}
+function exportPlan(){const blob=new Blob([JSON.stringify({version:2,...data},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='Lucias_Raumplan.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);close()}$('menuBtn').onclick=menu;$('editSelected').onclick=selectedMenu;$('file').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{const d=JSON.parse(await f.text());if(!validRoom(d.room)||!Array.isArray(d.items)||d.items.length>300||!d.items.every(validItem))throw Error('Ungültiges Planformat');if(!confirm('Aktuellen Plan ersetzen?'))return;data={room:d.room,items:d.items,next:Math.max(1,...d.items.map(i=>Number(i.id)+1))};selected=null;const lib=getLibrary();lib.active=null;putLibrary(lib);save();fit();status('Plan geladen')}catch(err){alert('Plan konnte nicht geladen werden: '+err.message)}finally{e.target.value=''}});// iOS standalone PWA: viewport measurements can lag behind an orientation change.
 // Refit immediately and after WebKit has settled; no changes to saved room coordinates.
 let orientationTimers=[];
 function refitAfterRotation(){
