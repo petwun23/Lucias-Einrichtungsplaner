@@ -1,5 +1,5 @@
-const CACHE='lucias-einrichtungsplaner-offline-14-strict-types';
-const FILES=['./','./index.html','./3d-furniture-v14.html','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
+const CACHE='lucias-einrichtungsplaner-offline-15-furniture-geometry';
+const FILES=['./','./index.html','./3d-furniture-v15.html','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES)).then(()=>self.skipWaiting()))});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim()))});
 self.addEventListener('fetch',event=>{

@@ -1,0 +1,153 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><title>Lucias 3D-Raumviewer</title><style>
+*{box-sizing:border-box}html,body{margin:0;height:100%;font-family:system-ui,-apple-system,sans-serif;color:#20314a;background:#eef3f9;-webkit-text-size-adjust:100%}body{display:flex;flex-direction:column;min-height:100dvh}header{background:#172d4b;color:white;padding:10px 12px;font-size:clamp(14px,3.5vw,18px);font-weight:750;display:flex;align-items:center;gap:10px;flex-wrap:wrap}header button{white-space:nowrap}#styleTools{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:8px 10px;background:#fff;border-bottom:1px solid #cbd5e1}#styleTools button{padding:7px 10px;font-size:13px}#styleTools button.active{background:#2864bb;color:#fff}#styleTools select{font-size:13px;padding:7px;max-width:145px;border:1px solid #aab9cd;border-radius:7px}#furnitureSettings{background:#fff;padding:10px;max-height:38dvh;overflow:auto;border-bottom:1px solid #cbd5e1}#furnitureSettings .row{gap:8px;flex-wrap:wrap}#furnitureSettings .row span{min-width:110px;flex:1}#furnitureSettings select{min-width:100px;max-width:150px;flex:1;padding:8px;border:1px solid #aab9cd;border-radius:7px}#viewer{min-height:0}#editHeights{margin-left:auto;font-size:13px;padding:7px 9px}main{display:flex;flex-direction:column;min-height:0;flex:1}main.model-ready section{display:none!important}main.model-ready #viewer{min-height:0;flex:1}section{padding:12px;overflow:auto;max-height:43dvh;background:#fff;border-bottom:1px solid #cbd5e1}h2{font-size:16px;margin:0 0 10px}p{font-size:13px;line-height:1.45}button,.file-button{display:inline-block;border:1px solid #aab9cd;border-radius:9px;padding:10px 12px;background:#fff;color:#173d70;font-weight:700;font-size:14px;cursor:pointer}button.primary,.file-button{background:#2864bb;color:white;border-color:#2864bb}.row{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:7px 0;border-bottom:1px solid #edf0f5}.row span{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.row input{width:95px;flex:none;padding:8px;border:1px solid #9aaec7;border-radius:7px;font-size:16px}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.muted{color:#52667f}.hidden{display:none!important}#viewer{flex:1;position:relative;min-height:220px;overflow:hidden;touch-action:none;background:linear-gradient(#e4eefb,#f9fbff)}canvas{display:block;width:100%;height:100%;touch-action:none}#hint{position:absolute;left:10px;bottom:10px;background:#ffffffd9;padding:6px 9px;border-radius:7px;font-size:12px;pointer-events:none}#status{font-size:12px;min-height:16px;margin-top:8px}#file{display:none}@media(orientation:landscape){main{flex-direction:row}section{width:min(370px,43vw);max-height:none;border-right:1px solid #cbd5e1;border-bottom:0}#viewer{min-height:0}} </style></head><body>
+<header><button id="back2d" style="padding:6px 10px">← Zurück zu 2D</button><span>Lucias 3D-Raumviewer</span><button id="editHeights" class="hidden">Höhen bearbeiten</button></header><main id="main"><section><h2>Höhen für diesen Raum</h2><p id="planInfo" class="muted">Raumdaten werden übernommen …</p><div id="heights" class="hidden"><h2>Höhen eingeben (cm)</h2><div class="row"><span>Raumhöhe</span><input id="roomHeight" type="number" min="180" max="600" step="1" value="250" inputmode="numeric"></div><div id="furnitureFields"></div><div class="actions"><button id="generate" class="primary">3D-Modell erstellen</button><button id="resetView">Ansicht zurücksetzen</button></div></div><div id="status" aria-live="polite"></div></section><div id="styleTools" class="hidden"><button id="blocksMode">Quader</button><button id="furnitureMode">Möbel</button><button id="settingsToggle">Möbel gestalten</button></div><div id="furnitureSettings" class="hidden"></div><div id="viewer"><canvas id="scene"></canvas><div id="hint">Finger ziehen: drehen · Zwei Finger: zoomen</div></div></main>
+<script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id),canvas=$('scene'),ctx=canvas.getContext('2d');let plan=null,heights={},roomH=250,roomKey='draft',ready=false,az=-0.72,el=0.64,zoom=1,drag=null,pointers=new Map(),pinchDist=0,displayMode='blocks',furnSettings={},settingsOpen=false;const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
+function setModelMode(on){$('main').classList.toggle('model-ready',on);$('editHeights').classList.toggle('hidden',!on);$('styleTools').classList.toggle('hidden',!on);if(!on){settingsOpen=false;$('furnitureSettings').classList.add('hidden')}requestAnimationFrame(draw)}
+$('editHeights').onclick=()=>{setModelMode(false);$('status').textContent='Höhen ändern und erneut 3D-Modell erstellen.'};
+const finite=n=>Number.isFinite(Number(n));const num=n=>Number(n);const safeText=s=>String(s??'').slice(0,100);
+function validate(p){if(!p||!p.room||!finite(p.room.w)||!finite(p.room.h)||num(p.room.w)<100||num(p.room.h)<100||num(p.room.w)>1500||num(p.room.h)>1500||!Array.isArray(p.items)||p.items.length>300)throw Error('Ungültiger oder zu großer Raumplan');for(const i of p.items){if(!['furniture','door','window'].includes(i.type)||!finite(i.w)||!finite(i.h)||num(i.w)<20||num(i.w)>1500||num(i.h)<20||num(i.h)>1500||!finite(i.x)||!finite(i.y))throw Error('Ungültiges Objekt im Raumplan')}}
+function loadPlan(p,key){
+ try{validate(p);roomKey=String(key||'draft').slice(0,150);plan={room:{w:num(p.room.w),h:num(p.room.h)},items:p.items.map(i=>({...i}))};ready=false;setModelMode(false);heights={};roomH=250;furnSettings={};displayMode='blocks';
+ try{const saved=JSON.parse(localStorage.getItem('lucia_3d_heights_v1_'+roomKey)||'null');if(saved&&saved.heights&&typeof saved.heights==='object'){heights=saved.heights;roomH=Number(saved.roomH)||250}}catch(e){}
+ try{const st=JSON.parse(localStorage.getItem('lucia_3d_furniture_v1_'+roomKey)||'null');if(st&&typeof st==='object'){furnSettings=st.items||{};for(const cfg of Object.values(furnSettings)){if(cfg&&typeof cfg==='object')delete cfg.type;}displayMode=st.mode==='models'?'models':'blocks'}}catch(e){}$('roomHeight').value=roomH;
+ const furniture=plan.items.filter(i=>i.type==='furniture'&&!i.parked);
+ $('planInfo').textContent=`Raum: ${plan.room.w} × ${plan.room.h} cm · ${furniture.length} Möbel im Raum`;
+ const list=$('furnitureFields');list.replaceChildren();furniture.forEach(i=>{const row=document.createElement('div');row.className='row';const span=document.createElement('span');span.textContent=(i.name||'Möbel')+' · '+i.w+' × '+i.h+' cm';const input=document.createElement('input');input.type='number';input.min='1';input.max='600';input.step='1';input.value=heights[String(i.id)]||80;input.inputMode='numeric';input.dataset.id=String(i.id);row.append(span,input);list.append(row)});
+ $('heights').classList.remove('hidden');buildFurnitureSettings();updateModeButtons();$('status').textContent='Höhen prüfen und 3D-Modell erstellen.';
+ // Previously saved heights allow immediate 3D without another confirmation.
+ if(Object.keys(heights).length && furniture.every(i=>heights[String(i.id)])){ready=true;$('status').textContent='Gespeicherte Höhen übernommen.';setModelMode(true)}
+ draw();
+ }catch(err){$('status').textContent='Fehler: '+err.message}
+}
+window.addEventListener('message',e=>{if(e.origin!==location.origin||e.source!==window.parent||e.data?.kind!=='lucia-3d-plan')return;loadPlan(e.data.plan,e.data.roomKey)});
+$('back2d').onclick=()=>window.parent.postMessage({kind:'lucia-3d-close'},location.origin);
+window.parent.postMessage({kind:'lucia-3d-ready'},location.origin);
+$('generate').onclick=()=>{if(!plan)return;const h=num($('roomHeight').value);if(!Number.isFinite(h)||h<180||h>600){$('status').textContent='Bitte Raumhöhe zwischen 180 und 600 cm eingeben.';return}const next={};for(const input of $('furnitureFields').querySelectorAll('input')){const v=num(input.value);if(!Number.isFinite(v)||v<1||v>600){$('status').textContent='Bitte gültige Möbelhöhen zwischen 1 und 600 cm eingeben.';input.focus();return}next[input.dataset.id]=v}heights=next;roomH=h;ready=true;az=-0.72;el=0.64;zoom=1;try{localStorage.setItem('lucia_3d_heights_v1_'+roomKey,JSON.stringify({roomH,heights}))}catch(e){}$('status').textContent='3D-Modell erstellt. Zum Drehen mit einem Finger ziehen.';setModelMode(true);draw()};
+$('resetView').onclick=()=>{az=-0.72;el=0.64;zoom=1;draw()};
+function project(x,y,z,w,h,unit){const cx=plan.room.w/2,cy=plan.room.h/2;const X=x-cx,Y=y-cy,Z=z-roomH*.26;const ca=Math.cos(az),sa=Math.sin(az),ce=Math.cos(el),se=Math.sin(el);const xx=X*ca-Y*sa,yy=X*sa+Y*ca;return {x:w/2+xx*unit,y:h*.53+(yy*se-Z*ce)*unit,depth:yy*ce+Z*se}}
+function face(points,color,stroke='#64748b'){ctx.beginPath();ctx.moveTo(points[0].x,points[0].y);for(let k=1;k<points.length;k++)ctx.lineTo(points[k].x,points[k].y);ctx.closePath();ctx.fillStyle=color;ctx.fill();ctx.lineWidth=1;ctx.strokeStyle=stroke;ctx.stroke()}
+function boxFaces(x,y,z,w,d,h,color,unit,W,H){const P=(a,b,c)=>project(a,b,c,W,H,unit);const v=[P(x,y,z),P(x+w,y,z),P(x+w,y+d,z),P(x,y+d,z),P(x,y,z+h),P(x+w,y,z+h),P(x+w,y+d,z+h),P(x,y+d,z+h)];const defs=[[0,1,2,3],[0,1,5,4],[1,2,6,5],[2,3,7,6],[3,0,4,7],[4,5,6,7]];const colors=[color[0],color[1],color[2],color[3],color[4],color[5]];return defs.map((indices,j)=>({pts:indices.map(k=>v[k]),color:colors[j],depth:indices.reduce((sum,k)=>sum+v[k].depth,0)/4}))}
+
+const TYPES=[['auto','Automatisch'],['block','Quader'],['bed','Bett'],['singlebed','Einzelbett'],['sofa','Sofa'],['corner','Ecksofa'],['chair','Stuhl'],['officechair','Bürostuhl'],['armchair','Sessel'],['wardrobe','Kleiderschrank'],['dresser','Kommode'],['sideboard','Sideboard'],['nightstand','Nachttisch'],['tv','TV-Board'],['shelf','Bücherregal'],['openshelf','Offenes Regal'],['vitrine','Vitrine'],['table','Tisch'],['coffee','Couchtisch'],['desk','Schreibtisch'],['stool','Hocker'],['bench','Bank'],['shoes','Schuhschrank']];
+const COLORS={white:'#e9e7e0',black:'#35383d',oak:'#cba878',walnut:'#77523c',grey:'#979da4',blue:'#668cba',green:'#829b7c',beige:'#c8b69e'};
+const COLOR_LABELS={white:'Weiß',black:'Schwarz',oak:'Eiche hell',walnut:'Nussbaum',grey:'Grau',blue:'Blau',green:'Grün',beige:'Beige'};
+const STYLE_LABELS={modern:'Modern',classic:'Klassisch',country:'Landhaus'};
+const FURNITURE_TYPE_BY_NAME=Object.freeze({"Bett":"bed","Einzelbett":"singlebed","Sofa":"sofa","Ecksofa":"corner","Stuhl":"chair","Bürostuhl":"officechair","Sessel":"armchair","Kleiderschrank":"wardrobe","Kommode":"dresser","Sideboard":"sideboard","Nachttisch":"nightstand","TV-Board":"tv","Bücherregal":"shelf","Offenes Regal":"openshelf","Vitrine":"vitrine","Tisch":"table","Couchtisch":"coffee","Schreibtisch":"desk","Hocker":"stool","Bank":"bench","Schuhschrank":"shoes","Sonstiges (Quader)":"block"});
+function effectiveType(i){return FURNITURE_TYPE_BY_NAME[i.name]||'block'}
+function saveFurnitureSettings(){try{localStorage.setItem('lucia_3d_furniture_v1_'+roomKey,JSON.stringify({mode:displayMode,items:furnSettings}))}catch(e){}}
+function updateModeButtons(){$('blocksMode').classList.toggle('active',displayMode==='blocks');$('furnitureMode').classList.toggle('active',displayMode==='models');$('settingsToggle').classList.toggle('hidden',displayMode!=='models')}
+$('blocksMode').onclick=()=>{displayMode='blocks';settingsOpen=false;$('furnitureSettings').classList.add('hidden');updateModeButtons();saveFurnitureSettings();draw()};
+$('furnitureMode').onclick=()=>{displayMode='models';updateModeButtons();saveFurnitureSettings();draw()};
+$('settingsToggle').onclick=()=>{settingsOpen=!settingsOpen;$('furnitureSettings').classList.toggle('hidden',!settingsOpen);requestAnimationFrame(draw)};
+function buildFurnitureSettings(){const host=$('furnitureSettings');host.replaceChildren();if(!plan)return;for(const i of plan.items.filter(i=>i.type==='furniture'&&!i.parked)){const key=String(i.id),row=document.createElement('div');row.className='row';const title=document.createElement('span');title.textContent=(i.name||'Möbel')+' · '+i.w+'×'+i.h;row.append(title);const cfg=furnSettings[key]||{};for(const [field,choices,value] of [['style',Object.entries(STYLE_LABELS).map(([k,v])=>[k,v]),cfg.style||'modern'],['color',Object.entries(COLOR_LABELS).map(([k,v])=>[k,v]),cfg.color||'oak']]){const select=document.createElement('select');select.setAttribute('aria-label',field+' für '+(i.name||'Möbel'));for(const [v,label] of choices){const o=document.createElement('option');o.value=v;o.textContent=label;select.append(o)}select.value=value;select.onchange=()=>{furnSettings[key]={...(furnSettings[key]||{}),[field]:select.value};saveFurnitureSettings();draw()};row.append(select)}host.append(row)}}
+function shade(hex,factor){const rgb=[1,3,5].map(j=>parseInt(hex.slice(j,j+2),16));return '#'+rgb.map(c=>Math.round(clamp(c*factor,0,255)).toString(16).padStart(2,'0')).join('')}
+function piece(parts,x,y,z,w,d,h,color){if(w<=0||d<=0||h<=0)return;parts.push({x,y,z,w,d,h,color})}
+// V15: Ein Möbel besitzt ein festes lokales Koordinatensystem. Die Kopf-/Rücken-
+// seite wird NUR unter den geometrisch zulässigen Kanten ausgewählt.
+function orientedModel(i,H,type,style,base){
+ const x=num(i.x),y=num(i.y),w=num(i.w),d=num(i.h),rw=num(plan.room.w),rd=num(plan.room.h);
+ const isBed=type==='bed'||type==='singlebed',isSofa=['sofa','corner','armchair'].includes(type);
+ // Bett: Kopfende auf der KURZEN Kante; Sofa: Rücken auf der LANGEN Kante.
+ // Bei quadratischen Möbeln ist die Richtung nicht eindeutig: deterministisch nach Wandkontakt.
+ const backAxis=isBed?(w>=d?'x':'y'):(w>=d?'y':'x');
+ const gaps=backAxis==='x'?[{side:'left',gap:Math.abs(x)},{side:'right',gap:Math.abs(rw-(x+w))}]:[{side:'top',gap:Math.abs(y)},{side:'bottom',gap:Math.abs(rd-(y+d))}];
+ gaps.sort((a,b)=>a.gap-b.gap);const side=gaps[0].side;
+ // u verläuft an der Kopf-/Rückenwand entlang, v von dort in den Raum.
+ function point(u,v){if(side==='top')return [x+u*w,y+v*d];if(side==='bottom')return [x+(1-u)*w,y+(1-v)*d];if(side==='left')return [x+v*w,y+(1-u)*d];return [x+(1-v)*w,y+u*d]}
+ const parts=[];function add(u,v,z,uw,vw,zh,color=base){const a=point(u,v),b=point(u+uw,v+vw);piece(parts,Math.min(a[0],b[0]),Math.min(a[1],b[1]),z*H,Math.abs(a[0]-b[0]),Math.abs(a[1]-b[1]),zh*H,color)}
+ const light=shade(base,1.14),dark=shade(base,.75),trim=shade(base,.87),fabric=shade(base,1.07),white='#f2eee8';
+ if(isBed){
+   // Die Tiefe der Matratze ist die lange Achse; Kopfteil liegt auf v=0.
+   add(.025,.025,.02,.95,.95,.16,dark);add(.055,.105,.17,.89,.84,.43,light);
+   if(style==='modern'){add(.02,.015,.04,.96,.075,.78,base);add(.07,.03,.66,.86,.035,.12,trim)}
+   else if(style==='classic'){add(.02,.01,.02,.96,.085,.88,base);add(.075,.001,.25,.85,.025,.56,light);for(let k=0;k<4;k++)add(.13+k*.20,.001,.34,.035,.014,.35,trim)}
+   else{add(.02,.01,.02,.96,.09,.91,base);add(.08,.001,.25,.84,.027,.57,light);for(let k=0;k<5;k++)add(.10+k*.17,.001,.26,.027,.034,.55,trim)}
+   const n=type==='singlebed'?1:2;for(let k=0;k<n;k++){const pw=.73/n;add(.12+k*.73/n,.13,.61,pw,.18,.095,white)}
+   if(style==='classic')add(.09,.43,.605,.82,.48,.035,shade(base,1.20));
+ }else if(isSofa){
+   // Rücken entlang u (lange Kante), Sitzfläche vor dem Rücken.
+   const arm=type==='armchair'?.115:.09;
+   for(const u of [.035,1-arm-.035])add(u,.14,.12,arm,.80,.53,base);
+   add(.045,.16,.07,.91,.80,.14,dark);add(.06,.34,.22,.88,.59,.27,fabric);
+   const cushionCount=type==='armchair'?1:2;for(let k=0;k<cushionCount;k++){const cw=.84/cushionCount;add(.08+k*cw,.39,.43,cw-.015,.50,.10,light)}
+   if(style==='modern'){add(.06,.055,.16,.88,.25,.70,base);add(.075,.24,.43,.85,.11,.32,light)}
+   else if(style==='classic'){add(.05,.045,.13,.90,.24,.78,base);for(let k=0;k<cushionCount;k++)add(.08+k*.84/cushionCount,.22,.44,.84/cushionCount-.02,.17,.39,light);for(const u of [.045,.88])add(u,.13,.64,.075,.60,.13,trim)}
+   else{add(.04,.05,.13,.92,.22,.78,trim);for(let k=0;k<cushionCount;k++)add(.08+k*.84/cushionCount,.24,.43,.84/cushionCount-.025,.17,.39,white);add(.06,.03,.80,.88,.035,.09,base)}
+   if(type==='corner')add(.50,.45,.22,.43,.49,.28,light);
+ }else{
+   // Schrank: geschlossener Korpus, echte Frontflächen, Stil durch Geometrie.
+   add(.015,.04,0,.97,.94,.96,base);add(.015,.015,.02,.97,.055,.92,light);
+   if(style==='modern'){for(const u of [.07,.51]){add(u,.006,.09,.42,.022,.78,light);add(u+.38,.001,.43,.012,.014,.20,dark)}}
+   else if(style==='classic'){for(const u of [.07,.51]){add(u,.004,.09,.42,.026,.79,dark);add(u+.04,-.001,.15,.34,.014,.67,light);add(u+.035,-.006,.14,.35,.012,.025,trim);add(u+.035,-.006,.79,.35,.012,.025,trim);add(u+.36,-.009,.43,.018,.013,.13,dark)}add(.02,.015,.94,.96,.065,.06,trim)}
+   else{for(const u of [.07,.51]){add(u,.005,.08,.42,.025,.80,trim);add(u+.04,-.002,.16,.34,.015,.64,light);for(let k=0;k<3;k++)add(u+.08+k*.095,-.009,.18,.018,.014,.60,trim);add(u+.36,-.014,.45,.02,.018,.12,dark)}add(.02,.012,.94,.96,.075,.06,base);add(.025,.01,0,.95,.08,.08,dark)}
+ }
+ return parts;
+}
+function modelPieces(i,H){const x=num(i.x),y=num(i.y),w=num(i.w),d=num(i.h),type=effectiveType(i),cfg=furnSettings[String(i.id)]||{},style=cfg.style||'modern',base=COLORS[cfg.color]||COLORS.oak;
+ if(['bed','singlebed','sofa','corner','armchair','wardrobe'].includes(type))return orientedModel(i,H,type,style,base);
+ const light=shade(base,1.15),dark=shade(base,.74),parts=[];const add=(a,b,c,e,f,g,col=base)=>piece(parts,x+a*w,y+b*d,c*H,e*w,f*d,g*H,col);
+ if(type==='block')add(0,0,0,1,1,1);
+ else if(['dresser','sideboard','nightstand','tv','shoes','vitrine'].includes(type)){add(.02,.02,0,.96,.96,1,base);const n=type==='nightstand'?2:3;for(let j=0;j<n;j++){const start=.04+j*.92/n;add(start,.002,.13,.92/n-.018,.022,.75,light);if(style!=='modern'){add(start,.001,.15,.92/n-.018,.012,.035,dark);add(start,.001,.84,.92/n-.018,.012,.035,dark)}add(start+.92/n*.72,-.002,.50,.028,.012,.07,dark)}if(type==='vitrine')add(.09,-.005,.23,.82,.018,.60,'#a8c7d5')}
+ else if(['shelf','openshelf'].includes(type)){add(.01,.02,0,.08,.96,1,base);add(.91,.02,0,.08,.96,1,base);add(.01,.02,.95,.98,.96,.05,base);for(let j=1;j<4;j++)add(.04,.03,j*.23,.92,.94,.05,light);if(type==='shelf')add(.02,.93,0,.96,.06,1,dark)}
+ else if(['table','coffee','desk'].includes(type)){const top=type==='coffee'?.60:.83;add(.02,.02,top,.96,.96,.12,light);for(const xx of [.06,.87])for(const yy of [.07,.84])add(xx,yy,0,.07,.09,top,dark);if(type==='desk')add(.15,.07,.48,.70,.11,.30,base)}
+ else if(['chair','officechair','stool','bench'].includes(type)){const seat=type==='bench'?.49:.52;add(.06,.08,seat,.88,.84,.12,light);for(const xx of [.10,.83])for(const yy of [.13,.77])add(xx,yy,0,.07,.09,seat,dark);if(type!=='stool'&&type!=='bench')add(.06,.03,seat,.88,.13,1-seat,base);if(type==='officechair')add(.46,.40,0,.08,.10,seat,dark)}
+ else add(0,0,0,1,1,1,base);
+ return parts}
+function drawPieces(parts,unit,W,H){const view=[Math.sin(az)*Math.cos(el),Math.cos(az)*Math.cos(el),Math.sin(el)],normals=[[0,0,-1],[0,-1,0],[1,0,0],[0,1,0],[-1,0,0],[0,0,1]];const sorted=parts.map(p=>({...p,depth:project(p.x+p.w/2,p.y+p.d/2,p.z+p.h/2,W,H,unit).depth})).sort((a,b)=>a.depth-b.depth);for(const p of sorted){const colors=[shade(p.color,.67),shade(p.color,.82),shade(p.color,.75),shade(p.color,.88),shade(p.color,.72),shade(p.color,1.12)];boxFaces(p.x,p.y,p.z,p.w,p.d,p.h,colors,unit,W,H).filter((f,j)=>normals[j][0]*view[0]+normals[j][1]*view[1]+normals[j][2]*view[2]>0.00001).sort((a,b)=>a.depth-b.depth).forEach(f=>face(f.pts,f.color,'#8190a0'))}}
+function draw(){
+ const bounds=canvas.getBoundingClientRect(),W=Math.max(1,bounds.width),H=Math.max(1,bounds.height),dpr=Math.min(2,window.devicePixelRatio||1);
+ canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);
+ if(!ready||!plan){ctx.fillStyle='#52667f';ctx.font='15px system-ui';ctx.textAlign='center';ctx.fillText('Raum wird vorbereitet …',W/2,H/2);return}
+ const r=plan.room,unit=Math.min(W/(r.w+r.h+roomH)*1.15,H/(r.w+r.h+roomH)*1.65)*zoom;
+ const P=(x,y,z)=>project(x,y,z,W,H,unit);
+ // Always draw the floor first, the rear walls second, and opaque furniture last.
+ // Global face sorting previously caused wall/floor polygons to cut through a bed.
+ const floor=[P(0,0,0),P(r.w,0,0),P(r.w,r.h,0),P(0,r.h,0)];face(floor,'#eef3f8','#8fa1b6');
+ const wallDefs=[
+  {wall:'top',corners:[[0,0,0],[r.w,0,0],[r.w,0,roomH],[0,0,roomH]],center:[r.w/2,0]},
+  {wall:'right',corners:[[r.w,0,0],[r.w,r.h,0],[r.w,r.h,roomH],[r.w,0,roomH]],center:[r.w,r.h/2]},
+  {wall:'bottom',corners:[[r.w,r.h,0],[0,r.h,0],[0,r.h,roomH],[r.w,r.h,roomH]],center:[r.w/2,r.h]},
+  {wall:'left',corners:[[0,r.h,0],[0,0,0],[0,0,roomH],[0,r.h,roomH]],center:[0,r.h/2]}
+ ];
+ const centerDepth=P(r.w/2,r.h/2,roomH/2).depth;
+ const rearWalls=wallDefs.filter(w=>P(w.center[0],w.center[1],roomH/2).depth<centerDepth-0.001);
+ rearWalls.sort((a,b)=>P(a.center[0],a.center[1],roomH/2).depth-P(b.center[0],b.center[1],roomH/2).depth);
+ for(const wall of rearWalls){face(wall.corners.map(v=>P(...v)),'#e4ebf3','#9eafc4')}
+ const visibleWalls=new Set(rearWalls.map(w=>w.wall));
+ for(const i of plan.items.filter(i=>!i.parked&&(i.type==='door'||i.type==='window')&&visibleWalls.has(i.wall))){
+  const len=num(i.w),offset=num(i.offset)||0,wall=i.wall;
+  const height=i.type==='door'?Math.min(roomH,205):Math.min(120,roomH-90),base=i.type==='door'?0:90;
+  let ends;if(wall==='top')ends=[[offset,0],[offset+len,0]];
+  else if(wall==='bottom')ends=[[offset,r.h],[offset+len,r.h]];
+  else if(wall==='left')ends=[[0,offset],[0,offset+len]];
+  else if(wall==='right')ends=[[r.w,offset],[r.w,offset+len]];
+  else continue;
+  const quad=[...ends.map(p=>P(p[0],p[1],base)),...ends.slice().reverse().map(p=>P(p[0],p[1],base+height))];
+  face(quad,i.type==='door'?'#e6c7a4':'#8ed0ed',i.type==='door'?'#b8752b':'#148db6');
+ }
+ const furniture=plan.items.filter(i=>i.type==='furniture'&&!i.parked);
+ const palette=[['#9fc4e8','#729fc8','#5b89b5','#78a7d1','#6293bf','#b8d6f0'],['#dfbd9a','#c7a17d','#af8866','#d4ae88','#bd9672','#ead0b3'],['#b6d1b0','#8eae89','#749b70','#9abf94','#7da579','#cbe1c7'],['#c9b7dd','#a38cbe','#8d76aa','#b29bca','#9881b4','#dacbe8']];
+ // Painter order by furniture object, not by unrelated faces across the whole room.
+ // Cull faces pointing away from the camera to prevent hidden sides bleeding through.
+ const view=[Math.sin(az)*Math.cos(el),Math.cos(az)*Math.cos(el),Math.sin(el)];
+ const normals=[[0,0,-1],[0,-1,0],[1,0,0],[0,1,0],[-1,0,0],[0,0,1]];
+ const sorted=furniture.map((i,k)=>({i,k,depth:P(num(i.x)+num(i.w)/2,num(i.y)+num(i.h)/2,(heights[String(i.id)]||80)/2).depth})).sort((a,b)=>a.depth-b.depth);
+ for(const {i,k} of sorted){
+  const h=heights[String(i.id)]||80;
+  if(displayMode==='models'){drawPieces(modelPieces(i,h),unit,W,H);continue}
+  const parts=boxFaces(num(i.x),num(i.y),0,num(i.w),num(i.h),h,palette[k%palette.length],unit,W,H);
+  parts.forEach((part,j)=>{part.normal=normals[j];part.j=j});
+  parts.filter(f=>f.normal[0]*view[0]+f.normal[1]*view[1]+f.normal[2]*view[2]>0.00001)
+   .sort((a,b)=>a.depth-b.depth).forEach(f=>face(f.pts,f.color,'#74869c'));
+ }
+ ctx.font='600 12px system-ui';ctx.textAlign='center';
+ furniture.forEach(i=>{const p=P(num(i.x)+num(i.w)/2,num(i.y)+num(i.h)/2,(heights[String(i.id)]||80)+8);const label=safeText(i.name||'');if(!label||label==='Neues Möbel')return;const width=Math.min(160,ctx.measureText(label).width+12);ctx.fillStyle='rgba(255,255,255,.88)';ctx.fillRect(p.x-width/2,p.y-15,width,18);ctx.fillStyle='#233d60';ctx.fillText(label,p.x,p.y-2,width-8)});
+}
+function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
+canvas.addEventListener('pointerdown',e=>{if(!ready)return;canvas.setPointerCapture(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointers.size===1)drag={x:e.clientX,y:e.clientY};else if(pointers.size===2){pinchDist=dist(...pointers.values());drag=null}});
+canvas.addEventListener('pointermove',e=>{if(!pointers.has(e.pointerId))return;pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointers.size===2){const d=dist(...pointers.values());if(pinchDist>0)zoom=clamp(zoom*d/pinchDist,.35,5);pinchDist=d;draw()}else if(drag){const dx=e.clientX-drag.x,dy=e.clientY-drag.y;az+=dx*.012;el=clamp(el+dy*.009,.12,1.48);drag={x:e.clientX,y:e.clientY};draw()}});
+function end(e){pointers.delete(e.pointerId);drag=null;pinchDist=0}canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end);canvas.addEventListener('wheel',e=>{if(!ready)return;e.preventDefault();zoom=clamp(zoom*(e.deltaY>0?.9:1.1),.35,5);draw()},{passive:false});new ResizeObserver(draw).observe($('viewer'));window.addEventListener('orientationchange',()=>setTimeout(draw,250));draw();
+})();
+</script></body></html>
