@@ -28,16 +28,42 @@ function project(x,y,z,w,h,unit){const cx=plan.room.w/2,cy=plan.room.h/2;const X
 function face(points,color,stroke='#64748b'){ctx.beginPath();ctx.moveTo(points[0].x,points[0].y);for(let k=1;k<points.length;k++)ctx.lineTo(points[k].x,points[k].y);ctx.closePath();ctx.fillStyle=color;ctx.fill();ctx.lineWidth=1;ctx.strokeStyle=stroke;ctx.stroke()}
 function boxFaces(x,y,z,w,d,h,color,unit,W,H){const P=(a,b,c)=>project(a,b,c,W,H,unit);const v=[P(x,y,z),P(x+w,y,z),P(x+w,y+d,z),P(x,y+d,z),P(x,y,z+h),P(x+w,y,z+h),P(x+w,y+d,z+h),P(x,y+d,z+h)];const defs=[[0,1,2,3],[0,1,5,4],[1,2,6,5],[2,3,7,6],[3,0,4,7],[4,5,6,7]];const colors=[color[0],color[1],color[2],color[3],color[4],color[5]];return defs.map((indices,j)=>({pts:indices.map(k=>v[k]),color:colors[j],depth:indices.reduce((sum,k)=>sum+v[k].depth,0)/4}))}
 function draw(){const bounds=canvas.getBoundingClientRect(),W=Math.max(1,bounds.width),H=Math.max(1,bounds.height),dpr=Math.min(2,window.devicePixelRatio||1);canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);if(!ready||!plan){ctx.fillStyle='#52667f';ctx.font='15px system-ui';ctx.textAlign='center';ctx.fillText('Raum wird vorbereitet …',W/2,H/2);return}const r=plan.room;const unit=Math.min(W/(r.w+r.h+roomH)*1.15,H/(r.w+r.h+roomH)*1.65)*zoom;let faces=[];faces.push(...boxFaces(0,0,-2,r.w,r.h,2,['#d7dfe9','#c9d4e2','#c9d4e2','#c9d4e2','#c9d4e2','#eef3f8'],unit,W,H));
-// Rear walls: transparent surfaces with outlines; room stays open for inspection.
-const wallEdges=[[[0,0,0],[r.w,0,0],[r.w,0,roomH],[0,0,roomH]],[[r.w,0,0],[r.w,r.h,0],[r.w,r.h,roomH],[r.w,0,roomH]],[[r.w,r.h,0],[0,r.h,0],[0,r.h,roomH],[r.w,r.h,roomH]],[[0,r.h,0],[0,0,0],[0,0,roomH],[0,r.h,roomH]]];
-for(const edge of wallEdges){const pts=edge.map(v=>project(...v,W,H,unit));const depth=pts.reduce((s,p)=>s+p.depth,0)/4;faces.push({pts,color:'rgba(163,187,216,0.095)',depth,wall:true})}
+// Show only the two walls farthest from the camera. Front walls never obscure furniture.
+const wallDefs=[
+ {wall:'top',corners:[[0,0,0],[r.w,0,0],[r.w,0,roomH],[0,0,roomH]],center:[r.w/2,0]},
+ {wall:'right',corners:[[r.w,0,0],[r.w,r.h,0],[r.w,r.h,roomH],[r.w,0,roomH]],center:[r.w,r.h/2]},
+ {wall:'bottom',corners:[[r.w,r.h,0],[0,r.h,0],[0,r.h,roomH],[r.w,r.h,roomH]],center:[r.w/2,r.h]},
+ {wall:'left',corners:[[0,r.h,0],[0,0,0],[0,0,roomH],[0,r.h,roomH]],center:[0,r.h/2]}
+];
+const centerDepth=project(r.w/2,r.h/2,roomH/2,W,H,unit).depth;
+const visibleWalls=new Set();
+for(const wall of wallDefs){
+ const wallDepth=project(wall.center[0],wall.center[1],roomH/2,W,H,unit).depth;
+ if(wallDepth>=centerDepth-0.001)continue;
+ visibleWalls.add(wall.wall);
+ const pts=wall.corners.map(v=>project(...v,W,H,unit));
+ faces.push({pts,color:'#e4ebf3',depth:wallDepth,wall:true});
+}
 const furniture=plan.items.filter(i=>i.type==='furniture'&&!i.parked);const palette=[['#9fc4e8','#729fc8','#5b89b5','#78a7d1','#6293bf','#b8d6f0'],['#dfbd9a','#c7a17d','#af8866','#d4ae88','#bd9672','#ead0b3'],['#b6d1b0','#8eae89','#749b70','#9abf94','#7da579','#cbe1c7'],['#c9b7dd','#a38cbe','#8d76aa','#b29bca','#9881b4','#dacbe8']];
 furniture.forEach((i,k)=>{const h=heights[String(i.id)]||80;faces.push(...boxFaces(num(i.x),num(i.y),0,num(i.w),num(i.h),h,palette[k%palette.length],unit,W,H).map(f=>({...f,object:i}))) });
-faces.sort((a,b)=>b.depth-a.depth);for(const f of faces){face(f.pts,f.color,f.wall?'#8ba0b9':'#7b8b9f')}
-// Indicate door and window positions along room perimeter (not full cutouts in v1).
-for(const i of plan.items.filter(i=>!i.parked&&(i.type==='door'||i.type==='window'))){const len=i.w,offset=num(i.offset)||0,wall=i.wall;const height=i.type==='door'?Math.min(roomH,205):120,base=i.type==='door'?0:90;let pts;if(wall==='top')pts=[[offset,0],[offset+len,0]];else if(wall==='bottom')pts=[[offset,r.h],[offset+len,r.h]];else if(wall==='left')pts=[[0,offset],[0,offset+len]];else if(wall==='right')pts=[[r.w,offset],[r.w,offset+len]];else continue;const quad=[...pts.map(p=>project(p[0],p[1],base,W,H,unit)),...pts.slice().reverse().map(p=>project(p[0],p[1],base+height,W,H,unit))];face(quad,i.type==='door'?'rgba(231,161,81,.28)':'rgba(62,181,223,.35)',i.type==='door'?'#b8752b':'#148db6')}
+// Windows and doors belong to their wall plane; hide them with the near wall.
+for(const i of plan.items.filter(i=>!i.parked&&(i.type==='door'||i.type==='window')&&visibleWalls.has(i.wall))){
+ const len=num(i.w),offset=num(i.offset)||0,wall=i.wall;
+ const height=i.type==='door'?Math.min(roomH,205):Math.min(120,roomH-90),base=i.type==='door'?0:90;
+ let ends;if(wall==='top')ends=[[offset,0],[offset+len,0]];
+ else if(wall==='bottom')ends=[[offset,r.h],[offset+len,r.h]];
+ else if(wall==='left')ends=[[0,offset],[0,offset+len]];
+ else if(wall==='right')ends=[[r.w,offset],[r.w,offset+len]];
+ else continue;
+ const quad=[...ends.map(p=>project(p[0],p[1],base,W,H,unit)),...ends.slice().reverse().map(p=>project(p[0],p[1],base+height,W,H,unit))];
+ const depth=quad.reduce((sum,p)=>sum+p.depth,0)/4+0.05;
+ faces.push({pts:quad,color:i.type==='door'?'#e6c7a4':'#8ed0ed',stroke:i.type==='door'?'#b8752b':'#148db6',depth});
+}
+// Greater camera depth is closer to the viewer: paint distant faces first.
+faces.sort((a,b)=>a.depth-b.depth);
+for(const f of faces)face(f.pts,f.color,f.stroke||(f.wall?'#9eafc4':'#74869c'));
 // Label objects above their top faces
-ctx.font='600 12px system-ui';ctx.textAlign='center';furniture.forEach(i=>{const p=project(num(i.x)+num(i.w)/2,num(i.y)+num(i.h)/2,(heights[String(i.id)]||80)+8,W,H,unit);const label=safeText(i.name||'Möbel');const width=Math.min(160,ctx.measureText(label).width+12);ctx.fillStyle='rgba(255,255,255,.88)';ctx.fillRect(p.x-width/2,p.y-15,width,18);ctx.fillStyle='#233d60';ctx.fillText(label,p.x,p.y-2,width-8)})}
+ctx.font='600 12px system-ui';ctx.textAlign='center';furniture.forEach(i=>{const p=project(num(i.x)+num(i.w)/2,num(i.y)+num(i.h)/2,(heights[String(i.id)]||80)+8,W,H,unit);const label=safeText(i.name||'');if(!label||label==='Neues Möbel')return;const width=Math.min(160,ctx.measureText(label).width+12);ctx.fillStyle='rgba(255,255,255,.88)';ctx.fillRect(p.x-width/2,p.y-15,width,18);ctx.fillStyle='#233d60';ctx.fillText(label,p.x,p.y-2,width-8)})}
 function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
 canvas.addEventListener('pointerdown',e=>{if(!ready)return;canvas.setPointerCapture(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointers.size===1)drag={x:e.clientX,y:e.clientY};else if(pointers.size===2){pinchDist=dist(...pointers.values());drag=null}});
 canvas.addEventListener('pointermove',e=>{if(!pointers.has(e.pointerId))return;pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointers.size===2){const d=dist(...pointers.values());if(pinchDist>0)zoom=clamp(zoom*d/pinchDist,.35,5);pinchDist=d;draw()}else if(drag){const dx=e.clientX-drag.x,dy=e.clientY-drag.y;az+=dx*.012;el=clamp(el+dy*.009,.12,1.48);drag={x:e.clientX,y:e.clientY};draw()}});
